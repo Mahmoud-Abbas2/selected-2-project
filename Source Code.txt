@@ -1,0 +1,100 @@
+from tensorflow.keras.layers import Input, Lambda, Dense, Flatten,Dropout,Conv2D,MaxPooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing import image
+from sklearn.metrics import accuracy_score,classification_report,confusion_matrix
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+import numpy as np
+import os
+import cv2
+import matplotlib.pyplot as plt
+
+# re-size all the images to this
+IMAGE_SIZE = (32,32)
+path="D:/Traffic_signs_dataset/DATA"
+data=[]
+c=0
+for folder in os.listdir(path):
+    class_path=path+"/"+folder
+    for img in os.listdir(class_path):
+        image_path=class_path+"/"+img        
+        image=cv2.imread(image_path)
+        try:
+          resizedImage=cv2.resize(image,IMAGE_SIZE)
+          imageGrayscale = cv2.cvtColor(resizedImage, cv2.COLOR_BGR2GRAY)
+          imageHistogramEqualized = cv2.equalizeHist(imageGrayscale)
+          data.append(imageHistogramEqualized)
+        except:
+          c+=1
+          continue
+print("Number of images skipped= ",c)
+
+#normalization
+x=np.array(data)
+x=x/255.0
+
+datagen = ImageDataGenerator(rescale = 1./255)
+dataset = datagen.flow_from_directory(path,
+                                      target_size = IMAGE_SIZE,
+                                      batch_size = 32,
+                                      class_mode = 'sparse')
+
+dataset.class_indices
+y=dataset.classes
+y.shape
+
+x_train,x_test,y_train,y_test=train_test_split(x,y,test_size=0.1)
+x_train,x_val,y_train,y_val=train_test_split(x_train,y_train,test_size=0.25)
+
+x_train.shape
+X_train = x_train.reshape(6969,32,32,1)
+X_train.shape
+x_test.shape
+X_test = x_test.reshape(1033, 32, 32, 1)
+X_test.shape
+#x_test.shape,y_test.shape
+
+model=Sequential()
+model.add(Conv2D(32,(5,5),activation='relu',input_shape=(32,32,1)))
+model.add(Conv2D(32,(5,5),activation='relu'))
+model.add(MaxPooling2D(2,2))
+model.add(Dropout(rate=0.25))
+model.add(Flatten())
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(rate=0.5))
+model.add(Dense(55, activation='softmax'))
+model.summary()
+
+#compile model:
+model.compile(optimizer='adam',loss='sparse_categorical_crossentropy',metrics=['accuracy'])
+
+from tensorflow.keras.callbacks import EarlyStopping
+early_stop=EarlyStopping(monitor='val_loss',mode='min',verbose=1,patience=5)
+history=model.fit(X_train,y_train,validation_data=(X_val,y_val),epochs=15,callbacks=[early_stop],shuffle=True)
+
+#loss graph
+print("Training Loss:",history.history['loss'][14])
+print("Validation Loss:",history.history['val_loss'][14])
+plt.plot(history.history['loss'],label='train loss')
+plt.plot(history.history['val_loss'],label='val loss')
+plt.legend()
+
+# accuracies
+print()
+print("Training accuracy:",history.history['accuracy'][14])
+print("Validation accuracy:",history.history['val_accuracy'][14])
+plt.plot(history.history['accuracy'], label='train acc')
+plt.plot(history.history['val_accuracy'], label='val acc')
+plt.legend()
+
+y_val_pred=model.predict(X_val)
+y_val_pred=np.argmax(y_val_pred,axis=1)
+print(classification_report(y_val_pred,y_val))
+
+confusion_matrix(y_val_pred,y_val)
+
+y_pred=model.predict(X_test)
+y_pred=np.argmax(y_pred,axis=1)
+print(classification_report(y_pred,y_test))
+confusion_matrix(y_pred,y_test)
